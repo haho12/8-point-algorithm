@@ -45,23 +45,28 @@ K = np.array([(f, 0, pu),
 
 # %%
 # compute essential matrix E
-def calc_E(uvMat):
+def calc_E(uvMat, K):
     A = np.zeros((len(uvMat),9))
-    # img1 x' y' x y im2
+    K_inv = np.linalg.inv(K)
+    
     for i in range(len(uvMat)):
-        A[i][0] = uvMat[i][0]*uvMat[i][2] # x1*x2
-        A[i][1] = uvMat[i][1]*uvMat[i][2] # y1*x2
-        A[i][2] = uvMat[i][2]             #    x2
-        A[i][3] = uvMat[i][0]*uvMat[i][3] # x1*y2
-        A[i][4] = uvMat[i][1]*uvMat[i][3] # y1*y2
-        A[i][5] = uvMat[i][3]             #    y2
-        A[i][6] = uvMat[i][0]             # x1
-        A[i][7] = uvMat[i][1]             # y1
-        A[i][8] = 1.0                     # 1.0
+        uv1 = np.array([uvMat[i][0], uvMat[i][1], 1.0])
+        x1_norm = K_inv.dot( uv1 )
+        uv2 = np.array([uvMat[i][2], uvMat[i][3], 1.0])
+        x2_norm = K_inv.dot( uv2 )
+        A[i][0] = x1_norm[0]*x2_norm[0] # x1*x2
+        A[i][1] = x1_norm[1]*x2_norm[0] # y1*x2
+        A[i][2] = x2_norm[0]            #    x2
+        A[i][3] = x1_norm[0]*x2_norm[1] # x1*y2
+        A[i][4] = x1_norm[1]*x2_norm[1] # y1*y2
+        A[i][5] = x2_norm[1]            #    y2
+        A[i][6] = x1_norm[0]            # x1
+        A[i][7] = x1_norm[1]            # y1
+        A[i][8] = 1.0                   # 1.0
     
     _,_,Vt = np.linalg.svd(A) # returns U,S,Vt
     
-    E_vec = Vt.transpose()[:,8]
+    E_vec = Vt.transpose()[:,8] # minimal solution: chose eigenvector of smallest eigenvalue
     E = E_vec.reshape((3,3))
 
     return E
@@ -120,11 +125,14 @@ cmap = plt.get_cmap("jet_r")
 
 # plot on img1
 def plot1(img, E, points):
+    K_inv = np.linalg.inv(K)
+    F = K_inv.T @ E @ K_inv
+    
     w = img.shape[1]
     num = 1
     for x, y, *pt in points:
         color = cmap(num/len(points))
-        a,b,c = np.array([*pt, 1]).transpose() @ E
+        a,b,c = np.array([*pt, 1]).transpose() @ F
         p1 = (0,-c/b)
         p2 = (w, -(a*w + c)/b)
         plt.plot(*zip(p1,p2), color=color)
@@ -138,11 +146,14 @@ def plot1(img, E, points):
 # plot on img 2 
 # epipolar lines based on  x'y' and points x,y
 def plot2(img, E, points):
+    K_inv = np.linalg.inv(K)
+    F = K_inv.T @ E @ K_inv
+    
     w = img.shape[1]
     num = 1
     for *pt, x,y in points:
         color = cmap(num/len(points))
-        a,b,c = E @ [*pt, 1]
+        a,b,c = F @ [*pt, 1]
         p1 = (0,-c/b)
         p2 = (w, -(a*w + c)/b)
         plt.plot(*zip(p1,p2), color=color)
@@ -158,7 +169,7 @@ def plot2(img, E, points):
 if True:
     #uvMat = uvMat0 # degenerate solution for close image
     uvMat = uvMat1  # correct solution for close image
-    E = calc_E(uvMat)
+    E = calc_E(uvMat, K)
     
     # Plot the epipolar lines
     plot1(close1, E, uvMat) 
@@ -166,7 +177,7 @@ if True:
 else:
     #uvMat = uvMat2 # degenerate solution for far image
     uvMat = uvMat3  # correct solution for far image
-    E = calc_E(uvMat)
+    E = calc_E(uvMat, K)
 
     # Plot the epipolar lines
     plot1(far1, E, uvMat) 
