@@ -42,6 +42,7 @@ pv = img_height / 2
 K = np.array([(f, 0, pu),
               (0, f, pv),
               (0, 0,  1)])
+K_inv = np.linalg.inv(K)
 
 # %%
 # compute essential matrix E
@@ -125,7 +126,6 @@ cmap = plt.get_cmap("jet_r")
 
 # plot on img1
 def plot1(img, E, points):
-    K_inv = np.linalg.inv(K)
     F = K_inv.T @ E @ K_inv
     
     w = img.shape[1]
@@ -146,7 +146,6 @@ def plot1(img, E, points):
 # plot on img 2 
 # epipolar lines based on  x'y' and points x,y
 def plot2(img, E, points):
-    K_inv = np.linalg.inv(K)
     F = K_inv.T @ E @ K_inv
     
     w = img.shape[1]
@@ -166,7 +165,7 @@ def plot2(img, E, points):
 
 #%%
 
-if True:
+if False:
     #uvMat = uvMat0 # degenerate solution for close image
     uvMat = uvMat1  # correct solution for close image
     E = calc_E(uvMat, K)
@@ -233,29 +232,41 @@ def decompose_E(E, uvMat):
     # s_rank2 = np.diag([s[0], s[1], 0])
     # E_rank2 = U @ s_rank2 @ Vt
 
+    # convert pixel coordinates to normalized camera coordinates
+    pts_cam1 = []
+    pts_cam2 = []
+    for i in range(len(uvMat)):
+        uv1 = np.array([uvMat[i][0], uvMat[i][1], 1.0])
+        x1_norm = K_inv.dot( uv1 )
+        pts_cam1.append(x1_norm)
+        
+        uv2 = np.array([uvMat[i][2], uvMat[i][3], 1.0])
+        x2_norm = K_inv.dot( uv2 )
+        pts_cam2.append(x2_norm)
+
     # decompose essential matrix into R, t (see Hartley and Zisserman 9.13)
     U, s, Vt = np.linalg.svd(E)
     W = np.array([0.0, -1.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0]).reshape(3, 3)
     
     # only in one of the four configurations will all the points be in front of both cameras
-    # First choice: R = U * W * Vt, T = +u_3 (see Hartley Zisserman 9.19)
+    # First choice: R = U * W * Vt, t = +u_3 (see Hartley Zisserman 9.19)
     R = U @ W @ Vt
-    T = U[:, 2]
+    t = U[:, 2]
     
-    if not in_front_of_both_cameras(first_inliers, second_inliers, R, T):
-        # Second choice: R = U * W * Vt, T = -u_3
-        T = - U[:, 2]
+    if not in_front_of_both_cameras(pts_cam1, pts_cam2, R, t):
+        # Second choice: R = U * W * Vt, t = -u_3
+        t = - U[:, 2]
         
-        if not in_front_of_both_cameras(first_inliers, second_inliers, R, T):
-            # Third choice: R = U * Wt * Vt, T = u_3
+        if not in_front_of_both_cameras(pts_cam1, pts_cam2, R, t):
+            # Third choice: R = U * Wt * Vt, t = u_3
             R = U.dot(W.T).dot(Vt)
-            T = U[:, 2]
+            t = U[:, 2]
     
-            if not in_front_of_both_cameras(first_inliers, second_inliers, R, T):
-                # Fourth choice: R = U * Wt * Vt, T = -u_3
-                T = - U[:, 2]
+            if not in_front_of_both_cameras(pts_cam1, pts_cam2, R, t):
+                # Fourth choice: R = U * Wt * Vt, t = -u_3
+                t = - U[:, 2]
     
-    return R, T
+    return R, t
 
-decompose_E(E, uvMat)
+R, t = decompose_E(E, uvMat)
    
